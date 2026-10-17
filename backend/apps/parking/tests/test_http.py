@@ -342,11 +342,6 @@ def test_other_driver_cannot_see_or_cancel_a_booking():
     assert owner.get("/api/bookings/?status=active").data["results"] == []
 
 
-def test_history_requires_a_token():
-    assert _client().get("/api/visits/").status_code == 401
-    assert _client().get("/api/invoices/").status_code == 401
-
-
 def test_booking_conflict_and_pagination():
     driver = _client()
     _register(driver, "pages@example.com")
@@ -376,6 +371,7 @@ def test_booking_conflict_and_pagination():
     assert len(page.data["results"]) == 20
     assert page.data["next"]
     assert page.data["results"][0]["id"] > page.data["results"][1]["id"]
+
 
 def test_checked_in_booking_cannot_be_cancelled():
     driver = _client()
@@ -480,3 +476,27 @@ def test_driver_books_enters_exits_and_reads_one_invoice():
     assert repeat.status_code == 409
     assert repeat.data["code"] == "no_active_visit"
     assert Invoice.objects.count() == 1
+
+
+def test_history_requires_a_token():
+    assert _client().get("/api/visits/").status_code == 401
+    assert _client().get("/api/invoices/").status_code == 401
+
+
+def test_seed_demo_can_run_twice():
+    call_command("seed_demo")
+    spots = Spot.objects.filter(code__in=[f"P{number:02d}" for number in range(1, 13)]).count()
+    users = User.objects.filter(email="demo@example.com").count()
+    vehicles = Vehicle.objects.filter(plate="A000AA").count()
+    tariffs = Tariff.objects.filter(effective_from=datetime(2020, 1, 1, tzinfo=timezone.utc)).count()
+    call_command("seed_demo")
+    assert spots == 12
+    assert users == 1
+    assert vehicles == 1
+    assert tariffs == 1
+    assert Spot.objects.filter(code__in=[f"P{number:02d}" for number in range(1, 13)]).count() == 12
+    assert User.objects.filter(email="demo@example.com").count() == 1
+    assert Vehicle.objects.filter(plate="A000AA").count() == 1
+    assert Tariff.objects.filter(effective_from=datetime(2020, 1, 1, tzinfo=timezone.utc)).count() == 1
+    password = os.environ.get("DEMO_PASSWORD") or "ParkDemo-2026"
+    assert authenticate(email="demo@example.com", password=password) is not None
