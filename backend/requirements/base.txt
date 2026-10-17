@@ -1,0 +1,8 @@
+Django
+djangorestframework
+channels
+channels-redis
+celery
+redis
+psycopg[binary]
+daphne
