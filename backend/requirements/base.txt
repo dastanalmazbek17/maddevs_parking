@@ -7,3 +7,4 @@ redis
 psycopg[binary]
 daphne
 pytest
+pytest-django==4.14.0
