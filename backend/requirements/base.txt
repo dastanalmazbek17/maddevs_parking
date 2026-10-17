@@ -6,3 +6,4 @@ celery
 redis
 psycopg[binary]
 daphne
+pytest
