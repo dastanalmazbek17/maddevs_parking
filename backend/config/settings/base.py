@@ -100,6 +100,16 @@ CHANNEL_LAYERS = {
 CELERY_BROKER_URL = REDIS_URL
 CELERY_RESULT_BACKEND = REDIS_URL
 CELERY_TIMEZONE = "UTC"
+CELERY_BEAT_SCHEDULE = {
+    "expire-overdue-bookings": {
+        "task": "apps.bookings.tasks.expire_overdue_bookings",
+        "schedule": 60.0,
+    },
+    "send-due-reminders": {
+        "task": "apps.notifications.tasks.send_due_reminders",
+        "schedule": 60.0,
+    },
+}
 
 EMAIL_BACKEND = os.environ.get(
     "EMAIL_BACKEND",
@@ -107,6 +117,7 @@ EMAIL_BACKEND = os.environ.get(
 )
 EMAIL_HOST = os.environ.get("EMAIL_HOST", "localhost")
 EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "1025"))
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "parking@localhost")
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},

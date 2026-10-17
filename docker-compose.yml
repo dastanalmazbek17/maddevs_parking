@@ -5,6 +5,11 @@ services:
       POSTGRES_DB: parking
       POSTGRES_USER: parking
       POSTGRES_PASSWORD: parking
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U parking -d parking"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   redis:
     image: redis:7
@@ -22,6 +27,10 @@ services:
   backend:
     build: ./backend
     env_file: .env.example
+    environment: &mail
+      EMAIL_BACKEND: django.core.mail.backends.smtp.EmailBackend
+      EMAIL_HOST: mailpit
+      EMAIL_PORT: "1025"
     depends_on:
       db:
         condition: service_started
@@ -33,10 +42,22 @@ services:
   worker:
     build: ./backend
     env_file: .env.example
+    environment: *mail
     command: celery -A config worker -l info
     depends_on:
       db:
-        condition: service_started
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  beat:
+    build: ./backend
+    env_file: .env.example
+    environment: *mail
+    command: celery -A config beat -l info
+    depends_on:
+      db:
+        condition: service_healthy
       redis:
         condition: service_healthy
 
