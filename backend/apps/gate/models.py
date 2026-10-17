@@ -1,4 +1,1 @@
-"""Barrier simulator: entry and exit by plate.
-
-Persistence models. Not implemented yet.
-"""
+"""The barrier has no table of its own. Entry and exit are visits."""
