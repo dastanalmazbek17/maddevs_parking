@@ -3,13 +3,14 @@
 from datetime import timedelta
 
 from django.db import IntegrityError, transaction
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
 from apps.accounts.models import Driver
+from apps.accounts.plates import normalize_plate
 from apps.bookings.models import Booking, BookingStatus
 from apps.parking.models import Spot
-from apps.visits.models import Visit
+from apps.visits.models import Invoice, Visit
 
 
 class DatabaseConstraintTests(TestCase):
@@ -50,6 +51,14 @@ class DatabaseConstraintTests(TestCase):
             spot=self.spot,
             driver=self.driver,
             plate="A123BC01",
+            starts_at=self.starts_at,
+            ends_at=self.starts_at + timedelta(hours=2),
+            status=BookingStatus.EXPIRED,
+        )
+        Booking.objects.create(
+            spot=self.spot,
+            driver=self.driver,
+            plate="A123BC01",
             starts_at=self.starts_at + timedelta(hours=2),
             ends_at=self.starts_at + timedelta(hours=3),
         )
@@ -70,11 +79,80 @@ class DatabaseConstraintTests(TestCase):
                 )
 
         visit.exited_at = self.starts_at + timedelta(minutes=30)
-        visit.amount_kopecks = 1500
-        visit.save(update_fields=["exited_at", "amount_kopecks"])
+        visit.save(update_fields=["exited_at"])
 
         Visit.objects.create(
             spot=self.other_spot,
             plate="A123BC01",
             entered_at=self.starts_at + timedelta(minutes=31),
         )
+
+    def test_one_spot_cannot_have_two_active_visits(self):
+        Visit.objects.create(
+            spot=self.spot,
+            plate="A123BC01",
+            entered_at=self.starts_at,
+        )
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                Visit.objects.create(
+                    spot=self.spot,
+                    plate="B456DE02",
+                    entered_at=self.starts_at + timedelta(minutes=1),
+                )
+
+    def test_normalized_plates_share_the_active_visit_index(self):
+        Visit.objects.create(
+            spot=self.spot,
+            plate="a 123 bc 01",
+            entered_at=self.starts_at,
+        )
+        self.assertEqual(Visit.objects.get().plate, "A123BC01")
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                Visit.objects.create(
+                    spot=self.other_spot,
+                    plate="А123ВС01",
+                    entered_at=self.starts_at + timedelta(minutes=1),
+                )
+
+    def test_booking_end_must_be_after_start(self):
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                Booking.objects.create(
+                    spot=self.spot,
+                    driver=self.driver,
+                    plate="A123BC01",
+                    starts_at=self.starts_at,
+                    ends_at=self.starts_at,
+                )
+
+    def test_visit_has_at_most_one_invoice(self):
+        visit = Visit.objects.create(
+            spot=self.spot,
+            plate="A123BC01",
+            entered_at=self.starts_at,
+        )
+        self.assertIsNone(visit.booking_id)
+        Invoice.objects.create(
+            visit=visit,
+            amount_kopecks=1500,
+            issued_at=self.starts_at + timedelta(hours=1),
+        )
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                Invoice.objects.create(
+                    visit=visit,
+                    amount_kopecks=2000,
+                    issued_at=self.starts_at + timedelta(hours=1),
+                )
+
+
+class PlateNormalizationTests(SimpleTestCase):
+    def test_case_spaces_hyphens_and_cyrillic_lookalikes(self):
+        self.assertEqual(normalize_plate("a 123 bc 01"), "A123BC01")
+        self.assertEqual(normalize_plate("A-123-BC-01"), "A123BC01")
+        self.assertEqual(normalize_plate("А123ВС01"), "A123BC01")

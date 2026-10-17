@@ -1,6 +1,9 @@
 """Driver profile: email and the plates registered to that driver."""
 
 from django.db import models
+from django.db.models import Q
+
+from apps.accounts.plates import PlateField
 
 
 class Driver(models.Model):
@@ -14,20 +17,24 @@ class Driver(models.Model):
 
 
 class Vehicle(models.Model):
-    """A plate listed on a driver's profile. The stored text is not normalized."""
+    """A plate listed on a driver's profile. Stored text is normalized."""
 
     driver = models.ForeignKey(
         Driver,
         on_delete=models.CASCADE,
         related_name="vehicles",
     )
-    plate = models.CharField(max_length=32)
+    plate = PlateField(max_length=32)
 
     class Meta:
         constraints = [
             models.UniqueConstraint(
                 fields=["driver", "plate"],
                 name="vehicle_plate_per_driver",
+            ),
+            models.CheckConstraint(
+                condition=~Q(plate=""),
+                name="vehicle_plate_not_blank",
             ),
         ]
 
