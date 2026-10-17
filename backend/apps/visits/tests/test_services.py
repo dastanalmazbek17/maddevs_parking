@@ -11,7 +11,7 @@ from django.test.utils import CaptureQueriesContext
 
 from apps.accounts.models import Driver, Vehicle
 from apps.bookings.models import BookingStatus
-from apps.bookings.services import create_booking
+from apps.bookings.services import create_booking, expire_overdue_bookings
 from apps.parking.exceptions import (
     DoubleEntry,
     ExitNotAfterEntry,
@@ -334,3 +334,60 @@ def test_parallel_walk_ins_fill_distinct_spots():
     assert len(set(wins)) == 3
     assert len(full) == 3
     assert Visit.objects.filter(exited_at__isnull=True).count() == 3
+
+
+@pytest.mark.django_db(transaction=True, serialized_rollback=True)
+def test_entry_and_expiry_never_leave_a_visit_on_an_expired_booking():
+    for index in range(12):
+        driver = _driver(f"race{index}@example.com")
+        vehicle = Vehicle.objects.create(driver=driver, plate=f"E{index:03d}AA")
+        spot = Spot.objects.create(code=f"E{index}")
+        start = _at(10)
+        booking = create_booking(
+            driver,
+            vehicle,
+            spot,
+            start,
+            start + timedelta(hours=1),
+            now=start,
+        )
+        barrier = threading.Barrier(2)
+        errors = []
+
+        def check_in():
+            try:
+                barrier.wait(timeout=5)
+                enter(vehicle.plate, now=start + timedelta(minutes=14))
+            except Exception as exc:
+                errors.append(exc)
+            finally:
+                connection.close()
+
+        def expire():
+            try:
+                barrier.wait(timeout=5)
+                expire_overdue_bookings(now=start + timedelta(minutes=15))
+            except Exception as exc:
+                errors.append(exc)
+            finally:
+                connection.close()
+
+        threads = [threading.Thread(target=check_in), threading.Thread(target=expire)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=30)
+
+        assert errors == []
+        booking.refresh_from_db()
+        linked = Visit.objects.filter(booking=booking)
+        if linked.exists():
+            assert booking.status == BookingStatus.CHECKED_IN
+            assert linked.count() == 1
+        else:
+            assert booking.status == BookingStatus.EXPIRED
+        Visit.objects.all().delete()
+        booking.delete()
+        vehicle.delete()
+        spot.delete()
+        driver.user.delete()

@@ -1,11 +1,17 @@
-"""Shared clock and the window in which a booking holds its spot."""
+"""Spot state derived from visits and bookings. Nothing is stored on the spot."""
 
-from django.db.models import Q
+from django.db.models import Exists, OuterRef, Q
 from django.utils import timezone
 
-from apps.bookings.models import BookingStatus
+from apps.bookings.models import Booking, BookingStatus
 from apps.parking.constants import ENTRY_WINDOW
 from apps.parking.exceptions import InvalidInterval
+from apps.parking.models import Spot
+from apps.visits.models import Visit
+
+OCCUPIED = "occupied"
+BOOKED = "booked"
+FREE = "free"
 
 
 def resolve_now(now):
@@ -28,3 +34,25 @@ def booking_holds_spot_q(now):
         starts_at__gt=now - ENTRY_WINDOW,
         starts_at__lte=now + ENTRY_WINDOW,
     )
+
+
+def spot_statuses(*, now=None):
+    """Return every spot as `(spot, occupied|booked|free)`, ordered by pk."""
+
+    now = resolve_now(now)
+    active_visit = Visit.objects.filter(spot=OuterRef("pk"), exited_at__isnull=True)
+    held_booking = Booking.objects.filter(spot=OuterRef("pk")).filter(booking_holds_spot_q(now))
+    spots = Spot.objects.annotate(
+        has_visit=Exists(active_visit),
+        has_hold=Exists(held_booking),
+    ).order_by("pk")
+    result = []
+    for spot in spots:
+        if spot.has_visit:
+            state = OCCUPIED
+        elif spot.has_hold:
+            state = BOOKED
+        else:
+            state = FREE
+        result.append((spot, state))
+    return result

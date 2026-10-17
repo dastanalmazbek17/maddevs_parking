@@ -1,4 +1,4 @@
-"""Create and cancel bookings. No HTTP and no gate logic."""
+"""Create, cancel, and expire bookings. No HTTP and no gate logic."""
 
 from django.db import IntegrityError, transaction
 from psycopg.errors import CheckViolation, ExclusionViolation
@@ -7,6 +7,7 @@ from apps.accounts.models import Vehicle
 from apps.bookings.models import HOLDING_SPOT_STATUSES, Booking, BookingStatus
 from apps.parking.constants import (
     BOOKING_START_GRACE,
+    ENTRY_WINDOW,
     MAX_BOOKING_DURATION,
     MIN_BOOKING_DURATION,
 )
@@ -92,6 +93,21 @@ def cancel_booking(driver, booking, *, now=None):
         locked.status = BookingStatus.CANCELLED
         locked.save(update_fields=["status"])
         return locked
+
+
+def expire_overdue_bookings(*, now=None):
+    """Mark active bookings as expired once their entry window has closed.
+
+    One conditional UPDATE, so a booking that was just checked in is left alone.
+    Returns how many rows changed.
+    """
+
+    now = resolve_now(now)
+    with transaction.atomic():
+        return Booking.objects.filter(
+            status=BookingStatus.ACTIVE,
+            starts_at__lte=now - ENTRY_WINDOW,
+        ).update(status=BookingStatus.EXPIRED)
 
 
 def _validate_interval(starts_at, ends_at):

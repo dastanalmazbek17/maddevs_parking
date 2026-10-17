@@ -9,7 +9,7 @@ from django.db import connection
 
 from apps.accounts.models import Driver, Vehicle
 from apps.bookings.models import Booking, BookingStatus
-from apps.bookings.services import cancel_booking, create_booking
+from apps.bookings.services import cancel_booking, create_booking, expire_overdue_bookings
 from apps.parking.exceptions import (
     BookingConflict,
     BookingNotCancellable,
@@ -164,8 +164,7 @@ def test_overlapping_spot_or_vehicle_is_a_conflict_and_released_statuses_are_not
     replacement = _book(world)
     assert replacement.pk != first.pk
 
-    replacement.status = BookingStatus.EXPIRED
-    replacement.save(update_fields=["status"])
+    expire_overdue_bookings(now=replacement.starts_at + timedelta(minutes=15))
     replacement.refresh_from_db()
     assert replacement.status == BookingStatus.EXPIRED
     after_expiry = _book(
@@ -210,6 +209,50 @@ def test_cancel_is_idempotent_and_rejects_the_wrong_driver_or_status():
     active.save(update_fields=["status"])
     with pytest.raises(BookingNotCancellable):
         cancel_booking(world["driver"], active, now=world["now"])
+
+
+@pytest.mark.django_db
+def test_expire_uses_the_entry_window_and_leaves_other_statuses():
+    world = _world()
+    now = world["now"]
+    due = _book(world, starts_at=now, ends_at=now + timedelta(hours=1))
+    kept = _book(
+        world,
+        spot=world["other_spot"],
+        vehicle=world["second_vehicle"],
+        starts_at=now + timedelta(minutes=15),
+        ends_at=now + timedelta(hours=2),
+    )
+    checked_in = _book(
+        world,
+        starts_at=now + timedelta(hours=3),
+        ends_at=now + timedelta(hours=4),
+        vehicle=world["second_vehicle"],
+    )
+    checked_in.status = BookingStatus.CHECKED_IN
+    checked_in.save(update_fields=["status"])
+    cancelled = _book(
+        world,
+        spot=world["other_spot"],
+        starts_at=now + timedelta(hours=3),
+        ends_at=now + timedelta(hours=4),
+    )
+    cancel_booking(world["driver"], cancelled, now=now)
+
+    assert expire_overdue_bookings(now=now + timedelta(minutes=15) - timedelta(microseconds=1)) == 0
+    due.refresh_from_db()
+    assert due.status == BookingStatus.ACTIVE
+
+    assert expire_overdue_bookings(now=now + timedelta(minutes=15)) == 1
+    assert expire_overdue_bookings(now=now + timedelta(minutes=15)) == 0
+    due.refresh_from_db()
+    kept.refresh_from_db()
+    checked_in.refresh_from_db()
+    cancelled.refresh_from_db()
+    assert due.status == BookingStatus.EXPIRED
+    assert kept.status == BookingStatus.ACTIVE
+    assert checked_in.status == BookingStatus.CHECKED_IN
+    assert cancelled.status == BookingStatus.CANCELLED
 
 
 @pytest.mark.django_db(transaction=True, serialized_rollback=True)
