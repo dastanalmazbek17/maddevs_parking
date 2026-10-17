@@ -1,6 +1,8 @@
-"""Barrier simulator: entry and exit by plate.
+from django.urls import path
 
-HTTP routes. Not implemented yet.
-"""
+from apps.gate.views import GateEnterView, GateExitView
 
-urlpatterns = []
+urlpatterns = [
+    path("enter/", GateEnterView.as_view()),
+    path("exit/", GateExitView.as_view()),
+]

@@ -376,3 +376,107 @@ def test_booking_conflict_and_pagination():
     assert len(page.data["results"]) == 20
     assert page.data["next"]
     assert page.data["results"][0]["id"] > page.data["results"][1]["id"]
+
+def test_checked_in_booking_cannot_be_cancelled():
+    driver = _client()
+    _register(driver, "stay@example.com")
+    vehicle = driver.post("/api/vehicles/", {"plate": "STAY01"}, format="json").data
+    spot = _spot()
+    start = datetime.now(timezone.utc)
+    created = _book(driver, vehicle["id"], spot.pk, start, start + timedelta(hours=1))
+    assert created.status_code == 201, created.data
+    entered = _client().post("/api/gate/enter/", {"plate": "stay01"}, format="json")
+    assert entered.status_code == 201, entered.data
+    assert entered.data["booking_id"] == created.data["id"]
+    denied = driver.post(f"/api/bookings/{created.data['id']}/cancel/")
+    assert denied.status_code == 409
+    assert denied.data["code"] == "booking_not_cancellable"
+
+
+def test_gate_is_public_and_reports_entry_conflicts():
+    anonymous = _client()
+    assert anonymous.post("/api/gate/enter/", {}, format="json").status_code == 400
+    empty = anonymous.post("/api/gate/enter/", {"plate": " - "}, format="json")
+    assert empty.status_code == 400
+    assert empty.data["code"] == "invalid_plate"
+    nowhere = anonymous.post("/api/gate/exit/", {"plate": "NONE01"}, format="json")
+    assert nowhere.status_code == 409
+    assert nowhere.data["code"] == "no_active_visit"
+    full = anonymous.post("/api/gate/enter/", {"plate": "FULL01"}, format="json")
+    assert full.status_code == 409
+    assert full.data["code"] == "no_free_place"
+
+    _spot("G1")
+    first = anonymous.post("/api/gate/enter/", {"plate": "А777АА"}, format="json")
+    assert first.status_code == 201
+    assert first.data["plate"] == "A777AA"
+    assert first.data["booking_id"] is None
+    assert first.data["spot_code"] == "G1"
+    second = anonymous.post("/api/gate/enter/", {"plate": "a777aa"}, format="json")
+    assert second.status_code == 409
+    assert second.data["code"] == "double_entry"
+
+
+def test_exit_at_the_entry_instant_is_409():
+    _spot("E1")
+    frozen = datetime(2026, 6, 1, 4, 0, tzinfo=timezone.utc)
+    driver = _client()
+    _register(driver, "frozen@example.com")
+    vehicle = driver.post("/api/vehicles/", {"plate": "FRZN01"}, format="json").data
+    spot = Spot.objects.get(code="E1")
+    with patch("django.utils.timezone.now", return_value=frozen):
+        created = _book(driver, vehicle["id"], spot.pk, frozen, frozen + timedelta(hours=1))
+        assert created.status_code == 201, created.data
+        entered = _client().post("/api/gate/enter/", {"plate": "FRZN01"}, format="json")
+        assert entered.status_code == 201, entered.data
+        exited = _client().post("/api/gate/exit/", {"plate": "FRZN01"}, format="json")
+    assert exited.status_code == 409
+    assert exited.data["code"] == "exit_not_after_entry"
+    assert Visit.objects.get(plate="FRZN01").exited_at is None
+    assert Invoice.objects.count() == 0
+
+
+def test_driver_books_enters_exits_and_reads_one_invoice():
+    driver = _client()
+    _register(driver, "flow@example.com")
+    vehicle = driver.post("/api/vehicles/", {"plate": "flow01"}, format="json").data
+    spot = _spot("FLOW")
+    start = datetime.now(timezone.utc)
+    created = _book(driver, vehicle["id"], spot.pk, start, start + timedelta(hours=1))
+    assert created.status_code == 201, created.data
+
+    gate = _client()
+    entered = gate.post("/api/gate/enter/", {"plate": "FLOW01"}, format="json")
+    assert entered.status_code == 201, entered.data
+    assert entered.data["booking_id"] == created.data["id"]
+    assert entered.data["spot_code"] == "FLOW"
+
+    time.sleep(0.05)
+    exited = gate.post("/api/gate/exit/", {"plate": "FLOW01"}, format="json")
+    assert exited.status_code == 200, exited.data
+    invoice = exited.data["invoice"]
+    visit = exited.data["visit"]
+    entered_at = datetime.fromisoformat(visit["entered_at"].replace("Z", "+00:00"))
+    exited_at = datetime.fromisoformat(visit["exited_at"].replace("Z", "+00:00"))
+    tariffs = [tariff_from_row(row) for row in Tariff.objects.all()]
+    assert invoice["total_kopecks"] == price_visit(entered_at, exited_at, tariffs).total_kopecks
+    assert type(invoice["total_kopecks"]) is int
+
+    history = driver.get("/api/visits/")
+    assert history.status_code == 200
+    assert history.data["count"] == 1
+    assert history.data["results"][0]["invoice"]["total_kopecks"] == invoice["total_kopecks"]
+    bills = driver.get("/api/invoices/")
+    assert bills.status_code == 200
+    assert bills.data["results"][0]["total_kopecks"] == invoice["total_kopecks"]
+    assert bills.data["results"][0]["visit_id"] == visit["id"]
+
+    other = _client()
+    _register(other, "outsider@example.com")
+    assert other.get("/api/visits/").data["results"] == []
+    assert other.get("/api/invoices/").data["results"] == []
+
+    repeat = gate.post("/api/gate/exit/", {"plate": "FLOW01"}, format="json")
+    assert repeat.status_code == 409
+    assert repeat.data["code"] == "no_active_visit"
+    assert Invoice.objects.count() == 1

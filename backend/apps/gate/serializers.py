@@ -1,4 +1,5 @@
-"""Barrier simulator: entry and exit by plate.
+from rest_framework import serializers
 
-API serializers. Not implemented yet.
-"""
+
+class PlateSerializer(serializers.Serializer):
+    plate = serializers.CharField(allow_blank=True)
