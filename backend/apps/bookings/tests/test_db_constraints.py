@@ -90,6 +90,7 @@ class DatabaseConstraintTests(TestCase):
             spot=self.other_spot,
             start=self.starts_at,
             end=self.starts_at + timedelta(hours=24),
+            vehicle=self.other_vehicle,
         )
 
         with self.assertRaises(IntegrityError):

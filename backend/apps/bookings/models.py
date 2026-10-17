@@ -75,6 +75,17 @@ class Booking(models.Model):
                 ],
                 condition=Q(status__in=HOLDING_SPOT_STATUSES),
             ),
+            ExclusionConstraint(
+                name="booking_no_overlap_per_vehicle",
+                expressions=[
+                    ("vehicle", RangeOperators.EQUAL),
+                    (
+                        TsTzRange(F("starts_at"), F("ends_at"), RangeBoundary()),
+                        RangeOperators.OVERLAPS,
+                    ),
+                ],
+                condition=Q(status__in=HOLDING_SPOT_STATUSES),
+            ),
         ]
 
     def __str__(self):
