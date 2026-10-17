@@ -1,16 +1,16 @@
 """Spot reservations.
 
-Active bookings of one spot cannot overlap. The rule is a PostgreSQL exclusion
-constraint, so two concurrent inserts cannot both succeed.
+Bookings that still hold a spot cannot overlap. The rule is a PostgreSQL
+exclusion constraint, so two concurrent inserts cannot both succeed.
 """
+
+from datetime import timedelta
 
 from django.contrib.postgres.constraints import ExclusionConstraint
 from django.contrib.postgres.fields import DateTimeRangeField, RangeBoundary, RangeOperators
 from django.db import models
 from django.db.models import F, Func, Q
 
-from apps.accounts.models import Driver
-from apps.accounts.plates import PlateField
 from apps.parking.models import Spot
 
 
@@ -23,15 +23,23 @@ class TsTzRange(Func):
 
 class BookingStatus(models.TextChoices):
     ACTIVE = "active", "Active"
+    CHECKED_IN = "checked_in", "Checked in"
+    COMPLETED = "completed", "Completed"
     CANCELLED = "cancelled", "Cancelled"
     EXPIRED = "expired", "Expired"
-    COMPLETED = "completed", "Completed"
+
+
+# Statuses that still occupy the spot for other bookings.
+HOLDING_SPOT_STATUSES = (BookingStatus.ACTIVE, BookingStatus.CHECKED_IN)
 
 
 class Booking(models.Model):
     spot = models.ForeignKey(Spot, on_delete=models.PROTECT, related_name="bookings")
-    driver = models.ForeignKey(Driver, on_delete=models.PROTECT, related_name="bookings")
-    plate = PlateField(max_length=32)
+    vehicle = models.ForeignKey(
+        "accounts.Vehicle",
+        on_delete=models.PROTECT,
+        related_name="bookings",
+    )
     starts_at = models.DateTimeField()
     ends_at = models.DateTimeField()
     status = models.CharField(
@@ -48,12 +56,13 @@ class Booking(models.Model):
                 name="booking_ends_after_start",
             ),
             models.CheckConstraint(
-                condition=Q(status__in=BookingStatus.values),
-                name="booking_status_known",
+                condition=Q(ends_at__gte=F("starts_at") + timedelta(minutes=15))
+                & Q(ends_at__lte=F("starts_at") + timedelta(hours=24)),
+                name="booking_duration_15m_to_24h",
             ),
             models.CheckConstraint(
-                condition=~Q(plate=""),
-                name="booking_plate_not_blank",
+                condition=Q(status__in=BookingStatus.values),
+                name="booking_status_known",
             ),
             ExclusionConstraint(
                 name="booking_no_overlap_per_spot",
@@ -64,9 +73,9 @@ class Booking(models.Model):
                         RangeOperators.OVERLAPS,
                     ),
                 ],
-                condition=Q(status=BookingStatus.ACTIVE),
+                condition=Q(status__in=HOLDING_SPOT_STATUSES),
             ),
         ]
 
     def __str__(self):
-        return f"{self.plate} @ {self.spot_id}"
+        return f"booking {self.pk} @ {self.spot_id}"

@@ -15,6 +15,13 @@ from apps.parking.models import Spot
 
 class Visit(models.Model):
     spot = models.ForeignKey(Spot, on_delete=models.PROTECT, related_name="visits")
+    driver = models.ForeignKey(
+        "accounts.Driver",
+        on_delete=models.SET_NULL,
+        related_name="visits",
+        null=True,
+        blank=True,
+    )
     booking = models.ForeignKey(
         Booking,
         on_delete=models.PROTECT,

@@ -1,8 +1,8 @@
 """A dated day/night price list.
 
 Instants are UTC. `day_starts_at` and `night_starts_at` are clock times in
-`timezone`. Rates are integer kopecks per minute. Which zone and which clock
-times the parking uses are not chosen yet.
+`timezone`. Rates are integer kopecks per minute. The initial row is seeded
+by a migration: Asia/Bishkek, day 07:00–23:00 at 200, night 23:00–07:00 at 100.
 """
 
 from django.db import models
