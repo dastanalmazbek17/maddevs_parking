@@ -342,6 +342,11 @@ def test_other_driver_cannot_see_or_cancel_a_booking():
     assert owner.get("/api/bookings/?status=active").data["results"] == []
 
 
+def test_history_requires_a_token():
+    assert _client().get("/api/visits/").status_code == 401
+    assert _client().get("/api/invoices/").status_code == 401
+
+
 def test_booking_conflict_and_pagination():
     driver = _client()
     _register(driver, "pages@example.com")

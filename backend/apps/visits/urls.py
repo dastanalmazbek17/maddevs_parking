@@ -1,6 +1,8 @@
-"""Entries, exits, and the invoice for a stay.
+from django.urls import path
 
-HTTP routes. Not implemented yet.
-"""
+from apps.visits.views import InvoiceListView, VisitListView
 
-urlpatterns = []
+urlpatterns = [
+    path("visits/", VisitListView.as_view()),
+    path("invoices/", InvoiceListView.as_view()),
+]
