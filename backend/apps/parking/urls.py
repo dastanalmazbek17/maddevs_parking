@@ -1,6 +1,8 @@
-"""Parking layout, spots, and their occupancy.
+from django.urls import path
 
-HTTP routes. Not implemented yet.
-"""
+from apps.parking.views import HealthView, SpotListView
 
-urlpatterns = []
+urlpatterns = [
+    path("health/", HealthView.as_view()),
+    path("spots/", SpotListView.as_view()),
+]

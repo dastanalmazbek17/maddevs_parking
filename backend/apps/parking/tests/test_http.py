@@ -1,6 +1,8 @@
-"""HTTP API: registration, login, and the shared error shape."""
+"""HTTP API: registration, login, vehicles, and the spot board."""
 
 import pytest
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from rest_framework.test import APIClient
 
 from config.exception_handler import api_exception_handler
@@ -85,3 +87,52 @@ def test_login_hides_which_field_was_wrong():
     )
     assert logged_in.status_code == 200
     assert logged_in.data["token"] == registered["token"]
+
+
+def test_health_is_public_and_uses_one_query():
+    client = _client()
+    with CaptureQueriesContext(connection) as captured:
+        response = client.get("/api/health/")
+    assert response.status_code == 200
+    assert response.data == {"status": "ok"}
+    assert len(captured) == 1
+
+
+def test_me_and_vehicles_require_a_token_and_normalize_the_plate():
+    anonymous = _client()
+    assert anonymous.get("/api/me/").status_code == 401
+    assert anonymous.get("/api/me/").data["code"] == "not_authenticated"
+    assert anonymous.post("/api/vehicles/", {"plate": "A111AA"}, format="json").status_code == 401
+
+    owner = _client()
+    _register(owner, "owner@example.com")
+    me = owner.get("/api/me/")
+    assert me.status_code == 200
+    assert me.data["email"] == "owner@example.com"
+    assert me.data["vehicles"] == []
+
+    created = owner.post("/api/vehicles/", {"plate": "а 123-вс"}, format="json")
+    assert created.status_code == 201
+    assert created.data["plate"] == "A123BC"
+    listed = owner.get("/api/vehicles/")
+    assert listed.status_code == 200
+    assert listed.data == [created.data]
+    assert owner.get("/api/me/").data["vehicles"] == [created.data]
+
+    blank = owner.post("/api/vehicles/", {"plate": "---"}, format="json")
+    assert blank.status_code == 400
+    assert blank.data["code"] == "invalid_plate"
+
+
+def test_duplicate_plate_is_409_and_does_not_name_the_owner():
+    first = _client()
+    _register(first, "first@example.com")
+    created = first.post("/api/vehicles/", {"plate": "A123BC"}, format="json")
+    assert created.status_code == 201
+
+    second = _client()
+    _register(second, "second@example.com")
+    conflict = second.post("/api/vehicles/", {"plate": "А123ВС"}, format="json")
+    assert conflict.status_code == 409
+    assert conflict.data["code"] == "plate_taken"
+    assert "first@example.com" not in str(conflict.data)
