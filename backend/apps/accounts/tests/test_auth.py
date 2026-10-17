@@ -22,7 +22,7 @@ class RegisterAndLoginTests(TestCase):
     def test_register_and_login_with_a_different_case(self):
         client = APIClient()
         registered = client.post(
-            "/api/accounts/register/",
+            "/api/auth/register/",
             {"email": "A@x.com", "password": "secret-pass"},
             format="json",
         )
@@ -31,7 +31,7 @@ class RegisterAndLoginTests(TestCase):
         token = registered.data["token"]
 
         logged_in = client.post(
-            "/api/accounts/login/",
+            "/api/auth/login/",
             {"email": "a@x.COM", "password": "secret-pass"},
             format="json",
         )
@@ -39,6 +39,6 @@ class RegisterAndLoginTests(TestCase):
         self.assertEqual(logged_in.data["token"], token)
 
         client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
-        me = client.get("/api/accounts/me/")
+        me = client.get("/api/me/")
         self.assertEqual(me.status_code, 200)
         self.assertEqual(me.data["email"], "a@x.com")
