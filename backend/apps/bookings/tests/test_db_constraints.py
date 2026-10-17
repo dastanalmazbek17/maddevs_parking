@@ -28,7 +28,7 @@ class DatabaseConstraintTests(TestCase):
         self.starts_at = timezone.now().replace(microsecond=0)
 
     def _driver(self, email):
-        user = User.objects.create_user(username=email, email=email, password="secret")
+        user = User.objects.create_user(email=email, password="secret")
         return Driver.objects.create(user=user)
 
     def _booking(self, *, spot, start, end, status=BookingStatus.ACTIVE, vehicle=None):
@@ -200,11 +200,7 @@ class DatabaseConstraintTests(TestCase):
     def test_login_email_is_unique_and_driver_is_one_user(self):
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
-                User.objects.create_user(
-                    username="second",
-                    email="driver@example.com",
-                    password="secret",
-                )
+                User.objects.create_user(email="driver@example.com", password="secret")
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
                 Driver.objects.create(user=self.driver.user)

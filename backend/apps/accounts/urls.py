@@ -1,6 +1,9 @@
-"""Driver profile: email, vehicle plates, and sign-in.
+from django.urls import path
 
-HTTP routes. Not implemented yet.
-"""
+from apps.accounts.views import LoginView, MeView, RegisterView
 
-urlpatterns = []
+urlpatterns = [
+    path("register/", RegisterView.as_view()),
+    path("login/", LoginView.as_view()),
+    path("me/", MeView.as_view()),
+]

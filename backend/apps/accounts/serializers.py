@@ -1,4 +1,11 @@
-"""Driver profile: email, vehicle plates, and sign-in.
+from rest_framework import serializers
 
-API serializers. Not implemented yet.
-"""
+
+class RegisterSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    password = serializers.CharField(write_only=True)
+
+
+class LoginSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    password = serializers.CharField(write_only=True)
