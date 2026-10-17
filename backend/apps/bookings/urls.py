@@ -1,6 +1,8 @@
-"""Spot reservations for a time interval and a plate.
+from django.urls import path
 
-HTTP routes. Not implemented yet.
-"""
+from apps.bookings.views import BookingCancelView, BookingListCreateView
 
-urlpatterns = []
+urlpatterns = [
+    path("bookings/", BookingListCreateView.as_view()),
+    path("bookings/<int:pk>/cancel/", BookingCancelView.as_view()),
+]
