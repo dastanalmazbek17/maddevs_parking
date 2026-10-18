@@ -6,5 +6,11 @@ export default defineConfig({
   server: {
     host: "0.0.0.0",
     port: 5173,
+    proxy: {
+      "/ws": {
+        target: "http://backend:8000",
+        ws: true,
+      },
+    },
   },
 });
