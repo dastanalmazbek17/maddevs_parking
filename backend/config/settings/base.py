@@ -119,6 +119,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.notifications.tasks.send_due_reminders",
         "schedule": 60.0,
     },
+    "notify-spots-changed": {
+        "task": "apps.parking.tasks.notify_spots_changed",
+        "schedule": 15.0,
+    },
 }
 
 EMAIL_BACKEND = os.environ.get(

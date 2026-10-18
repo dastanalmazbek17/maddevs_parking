@@ -14,8 +14,10 @@ from apps.accounts.models import Driver, Vehicle
 from apps.bookings.models import Booking
 from apps.bookings.services import cancel_booking, create_booking, expire_overdue_bookings
 from apps.parking.models import Spot
+from apps.parking.tasks import notify_spots_changed as notify_task
 from apps.visits.services import enter, exit_visit
 from config.asgi import application
+from config.celery import app as celery_app
 
 User = get_user_model()
 UTC = timezone.utc
@@ -156,6 +158,26 @@ def test_expiry_signals_only_when_a_booking_was_released(django_capture_on_commi
         await client.disconnect()
 
     _run(scenario)
+
+
+@pytest.mark.django_db
+def test_periodic_notify_sends_and_is_scheduled_every_fifteen_seconds(django_capture_on_commit_callbacks):
+    async def scenario():
+        client, connected = await _open("http://localhost")
+        assert connected
+
+        def tick():
+            with django_capture_on_commit_callbacks(execute=True):
+                notify_task()
+
+        await sync_to_async(tick)()
+        assert json.loads(await client.receive_from(timeout=2)) == SIGNAL
+        await client.disconnect()
+
+    _run(scenario)
+    entry = celery_app.conf.beat_schedule["notify-spots-changed"]
+    assert entry["task"] == "apps.parking.tasks.notify_spots_changed"
+    assert entry["schedule"] == 15.0
 
 
 @pytest.mark.django_db
