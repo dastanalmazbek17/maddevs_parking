@@ -1,0 +1,104 @@
+body {
+  margin: 0;
+  font-family: sans-serif;
+  color: #1c1c1c;
+  background: #f6f6f4;
+}
+
+.app {
+  max-width: 52rem;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button {
+  padding: 0.4rem 0.7rem;
+}
+
+button.active {
+  background: #1c1c1c;
+  color: #fff;
+}
+
+button.link {
+  background: none;
+  border: none;
+  padding: 0;
+  text-decoration: underline;
+}
+
+form {
+  display: grid;
+  gap: 0.6rem;
+  margin: 1rem 0;
+}
+
+label {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.row,
+.list li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.list {
+  padding: 0;
+  list-style: none;
+}
+
+.error {
+  color: #8f1d1d;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr));
+  gap: 0.5rem;
+}
+
+.spot,
+.legend li {
+  padding: 0.6rem;
+  border: 1px solid #c8c8c4;
+}
+
+.spot {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.legend {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0;
+  list-style: none;
+}
+
+.free {
+  background: #d8f3dc;
+}
+
+.booked {
+  background: #fff3bf;
+}
+
+.occupied {
+  background: #ffd6d6;
+}
