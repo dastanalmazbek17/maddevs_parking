@@ -23,6 +23,7 @@ from apps.parking.exceptions import (
     iter_causes,
 )
 from apps.parking.models import Spot
+from apps.parking.realtime import notify_spots_changed
 from apps.parking.services import resolve_now
 
 _OVERLAP_CONSTRAINTS = frozenset(
@@ -63,7 +64,7 @@ def create_booking(driver, vehicle, spot, starts_at, ends_at, *, now=None):
             raise BookingConflict("The vehicle already has a booking in that interval.")
         try:
             with transaction.atomic():
-                return Booking.objects.create(
+                booking = Booking.objects.create(
                     spot=locked_spot,
                     vehicle=locked_vehicle,
                     starts_at=starts_at,
@@ -75,6 +76,8 @@ def create_booking(driver, vehicle, spot, starts_at, ends_at, *, now=None):
             if mapped is exc:
                 raise
             raise mapped from exc
+        notify_spots_changed()
+        return booking
 
 
 def cancel_booking(driver, booking, *, now=None):
@@ -92,6 +95,7 @@ def cancel_booking(driver, booking, *, now=None):
             raise BookingNotCancellable("Only an active booking can be cancelled.")
         locked.status = BookingStatus.CANCELLED
         locked.save(update_fields=["status"])
+        notify_spots_changed()
         return locked
 
 
@@ -104,10 +108,13 @@ def expire_overdue_bookings(*, now=None):
 
     now = resolve_now(now)
     with transaction.atomic():
-        return Booking.objects.filter(
+        released = Booking.objects.filter(
             status=BookingStatus.ACTIVE,
             starts_at__lte=now - ENTRY_WINDOW,
         ).update(status=BookingStatus.EXPIRED)
+        if released:
+            notify_spots_changed()
+        return released
 
 
 def _validate_interval(starts_at, ends_at):

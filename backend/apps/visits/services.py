@@ -17,6 +17,7 @@ from apps.parking.exceptions import (
     constraint_name,
 )
 from apps.parking.models import Spot
+from apps.parking.realtime import notify_spots_changed
 from apps.parking.services import booking_holds_spot_q, resolve_now
 from apps.tariffs.models import Tariff
 from apps.tariffs.pricing import price_visit, tariff_from_row
@@ -42,8 +43,11 @@ def enter(plate, *, now=None):
         if booking is not None:
             visit = _enter_with_booking(booking, plate, now)
             if visit is not None:
+                notify_spots_changed()
                 return visit
-        return _enter_without_booking(plate, now)
+        visit = _enter_without_booking(plate, now)
+        notify_spots_changed()
+        return visit
 
 
 def exit_visit(plate, *, now=None):
@@ -76,6 +80,7 @@ def exit_visit(plate, *, now=None):
         if booking is not None and booking.status == BookingStatus.CHECKED_IN:
             booking.status = BookingStatus.COMPLETED
             booking.save(update_fields=["status"])
+        notify_spots_changed()
         return visit, invoice
 
 
