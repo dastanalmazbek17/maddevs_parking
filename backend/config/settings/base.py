@@ -89,11 +89,21 @@ STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+CHANNEL_REDIS_URL = os.environ.get("CHANNEL_REDIS_URL", "redis://localhost:6379/1")
 
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
-        "CONFIG": {"hosts": [REDIS_URL]},
+        "CONFIG": {
+            "hosts": [
+                {
+                    "address": CHANNEL_REDIS_URL,
+                    # redis-py 8 times out a blocking read at 5s, the same wait
+                    # channels_redis uses. A longer socket timeout lets that wait finish.
+                    "socket_timeout": 15,
+                }
+            ],
+        },
     }
 }
 

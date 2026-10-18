@@ -1,3 +1,9 @@
-"""WebSocket routes for live occupancy. Routes are added with the consumer."""
+"""WebSocket routes for live occupancy."""
 
-websocket_urlpatterns = []
+from django.urls import path
+
+from apps.parking.consumers import SpotConsumer
+
+websocket_urlpatterns = [
+    path("ws/spots/", SpotConsumer.as_asgi()),
+]
